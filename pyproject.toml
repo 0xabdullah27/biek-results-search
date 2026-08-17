@@ -1,0 +1,10 @@
+[project]
+name = "biek-results-search"
+version = "0.1.0"
+description = "BIEK (Karachi Board) results search & result gazette PDF tools — check HSC Part I/II results by roll number, extract rolls from result PDFs, bulk search with CSV export (Pre-Medical, Pre-Engineering, Science General, Humanities, Commerce)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pypdf2>=3.0.1",
+    "requests>=2.32.5",
+]
