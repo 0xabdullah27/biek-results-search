@@ -1,10 +1,15 @@
 # Project Progress & Research Notes
 
-**Last updated: 2026-08-17**
+**Last updated: 2026-08-28**
 
 This file is the single source of truth for where the project stands. Read this
 first before working on the project — it records everything we researched so we
 don't re-discover it.
+
+> **Quick status:** All 3 Part II 2026 results are declared. PDFs are downloaded.
+> The pksol web API is in a broken/transitional state — the BIEK mobile app works
+> but the public API returns "No data found". We're waiting for PKSOL to update
+> the web API. See Section 2 for details.
 
 ---
 
@@ -14,17 +19,19 @@ don't re-discover it.
 |---|---|---|---|---|
 | Science Pre-Medical | **DECLARED** | 31-07-2026 | `pdfs/pm_part2.pdf` (180 pp) | `rollNumbers/pm_rolls.txt` — **14,207** (300006–390783) |
 | Science Pre-Engineering | **DECLARED** | 17-08-2026 | `pdfs/se_part2.pdf` (154 pp) | `rollNumbers/se_rolls.txt` — **9,913** (800001–898101) |
-| Science General | **NOT ANNOUNCED** | — | — | — |
+| Science General | **DECLARED** | 27-08-2026 | `pdfs/sg_part2.pdf` (3.5 MB) | → `rollNumbers/sg_rolls.txt` (6xxxxx pattern) |
 | Humanities Regular/Private | DECLARED | 07/31-08-2026 | on board site | not downloaded |
 | Economics / Special candidates | DECLARED | 31-07-2026 | on board site | not downloaded |
 | Commerce | not announced | — | — | — |
 
 Gazette URLs (official board site):
 `https://www.biek.edu.pk/Result-2026/Annual/Part-II/<NAME>.pdf`
-(e.g. `SCIENCE%20PRE-MEDICAL.pdf`, `HSC%20PART-II-RESULT-GAZETTE-PRE-ENGINEERING-ANNUAL-2026-COMPLETE.pdf`)
+- PM: `SCIENCE%20PRE-MEDICAL.pdf`
+- SE: `HSC%20PART-II-RESULT-GAZETTE-PRE-ENGINEERING-ANNUAL-2026-COMPLETE.pdf`
+- SG: `HSC-RESULT-GAZETTE-SCIENCE%20GENERAL-PART-II-ANNUAL-2026-COMPLETE.pdf`
 
 **Roll number patterns — IMPORTANT (they differ from Part I):**
-- Part II 2026: PM = `3xxxxx`, SE = `8xxxxx`
+- Part II 2026: PM = `3xxxxx`, SE = `8xxxxx`, SG = `6xxxxx`
 - Part I 2025 (archived): PM = `4xxxxx`, SG = `7xxxxx`
 
 ---
@@ -43,12 +50,45 @@ Gazette URLs (official board site):
 - **Response:** `detail: {roll_no, applicant_name, father_name, secured_total, grade}` + `result: {theory[], practical[]}`
 - **Live list of valid exam codes:** `GET https://api.pksol.com/parameters`
 
-### ⚠️ CRITICAL: the API currently has NO data
-- `/parameters` lists only 2025 exams (`reg-p1-a-2025`, `pvt-p1-a-2025`, `reg-p2-a-2025`)
-- Every search returns `No data found` — including valid 2025 rolls (439581, 400001, 493944) and all 2026 variants tested
-- The endpoint works (HTTP 200, correct response shape) — the results table is simply **empty**
-- **Conclusion:** pksol has not loaded 2026 Part II data yet. The scripts are ready (`reg-p2-a-2026` is the confirmed-format code) — they will work unchanged the moment data loads.
-- Exam-code variants already tested and rejected: `reg-p2-2026`, `reg-p2-annual-2026`, `p2-a-2026`, `reg-part2-2026`, plus int/GET/cookie+CSRF payload variants.
+### ⚠️ CRITICAL: the API is in a BROKEN / TRANSITIONAL state
+
+**What happened (August 2026):**
+PKSOL changed the API field format but hasn't fully deployed it:
+
+| Aspect | Old format | New format |
+|---|---|---|
+| Exam code field | `exam_code` | `value` |
+| Faculty field | *(not required)* | `faculty` (required) |
+| Old format result | 500 error (missing `faculty`) | — |
+| New format result | — | `No data found` (even for 2025 rolls) |
+
+**Current API state (2026-08-28):**
+- `/parameters` lists only 3 old 2025 exam codes
+- Website dropdown (`biekresult.pksol.com`) only shows 2025 Supply options
+- New format (`value`+`faculty`) accepts requests but returns `No data found` for everything
+- Old format (`exam_code`) throws 500 error
+- **The BIEK mobile app (`com.biek.edu.app`) WORKS** — it uses the same `value`+`faculty` format and has 2026 data
+- The app likely uses a different API URL or requires authentication that isn't publicly documented
+
+**Verified working example (from app screenshots):**
+```json
+POST https://api.pksol.com/search
+{"faculty":"sg","value":"reg-p2-a-2026","roll_no":"607192"}
+→ Name: MUHAMMAD ABDULLAH, Father: MUHAMMAD MOBIN QURESHI, Marks: 582, Grade: C, PASS
+```
+
+**Conclusion:** The scripts are ready for the new format. Once PKSOL loads 2026 data into the web API, bulk search will work immediately.
+
+**Exam codes tested and rejected:** `reg-p2-2026`, `reg-p2-annual-2026`, `p2-a-2026`, `reg-part2-2026`, `reg-sg-p2-a-2026`, plus int/GET/cookie+CSRF variants.
+
+**How to find the app's real API (if needed):**
+Use mitmproxy to intercept the app's network traffic:
+```bash
+pip install mitmproxy
+mitmproxy --listen-port 8080
+# Set phone proxy to YOUR_PC_IP:8080, install CA cert from mitm.it
+# Open BIEK app → search → watch mitmproxy for the real API URL/headers
+```
 
 ---
 
@@ -98,12 +138,13 @@ Gazette URLs (official board site):
 
 ## 6. Open items / next steps
 
-1. **Watch the API** — poll `https://api.pksol.com/parameters`; the moment a 2026 code appears (e.g. `reg-p2-a-2026`), bulk search works as-is. Quick check: `curl https://api.pksol.com/parameters`.
-2. **When data loads:** test whether the Part I roll works in the search (`roll_no=<part1 roll>`, `value=reg-p2-a-2026`) — one request per roll, cheap to try.
-3. **Science General Part II** — not announced; check `https://www.biek.edu.pk/results.asp` for the gazette, then run the extractor.
-4. **Optional:** gazette parser to build results CSV directly from PDFs (roll + marks + grade only — **no names**, so it's a partial fallback while the API is empty).
-5. **Optional:** college-wise positional mapping tool (Part I roll → candidate Part II roll) — approximation only, needs manual verification.
-6. **Cleanup:** `pdfplumber` is installed in `.venv` but not declared in `pyproject.toml` — decide whether to keep (used for layout extraction) or remove.
+1. **🔴 Watch the API** — poll `https://api.pksol.com/parameters`; the moment 2026 codes appear with `value`+`faculty` format, bulk search works as-is. Quick check: `curl https://api.pksol.com/parameters`.
+2. **🟡 Extract SG rolls** — run extractor on `pdfs/sg_part2.pdf` to generate `rollNumbers/sg_rolls.txt`.
+3. **🟡 Trace the app's API** — use mitmproxy to capture the BIEK app's network traffic. The app works but the web API doesn't — finding the app's endpoint could unlock 2026 data immediately.
+4. **When data loads:** test whether the Part I roll works in the search (`roll_no=<part1 roll>`, `value=reg-p2-a-2026`) — one request per roll, cheap to try.
+5. **Optional:** gazette parser to build results CSV directly from PDFs (roll + marks + grade only — **no names**, so it's a partial fallback while the API is empty).
+6. **Optional:** college-wise positional mapping tool (Part I roll → candidate Part II roll) — approximation only, needs manual verification.
+7. **Cleanup:** `pdfplumber` is installed in `.venv` but not declared in `pyproject.toml` — decide whether to keep (used for layout extraction) or remove.
 
 ---
 
@@ -112,6 +153,7 @@ Gazette URLs (official board site):
 ```bash
 # Extract rolls from a Part II gazette
 python scripts/extract_rolls_from_pdf.py --pdf pdfs/pm_part2.pdf --output rollNumbers/pm_rolls.txt
+python scripts/extract_rolls_from_pdf.py --pdf pdfs/sg_part2.pdf --output rollNumbers/sg_rolls.txt
 
 # Sequential search (Part II 2026 default)
 python scripts/biek_scraper.py --file rollNumbers/pm_rolls.txt --faculty sm --output results/pm_results.csv
@@ -122,7 +164,10 @@ python scripts/bulk_search_all.py --file rollNumbers/pm_rolls.txt --faculty sm -
 # Check API exam codes
 curl https://api.pksol.com/parameters
 
-# Test one roll against the API
+# Test one roll against the API (new format: value + faculty)
 curl -s -X POST https://api.pksol.com/search -H "Content-Type: application/json" \
-  -d '{"faculty":"sm","value":"reg-p2-a-2026","roll_no":"312204","matric_roll_no":"312204"}'
+  -d '{"faculty":"sg","value":"reg-p2-a-2026","roll_no":"607192"}'
+
+# Trace the BIEK app's real API (requires phone proxy setup)
+pip install mitmproxy && mitmproxy --listen-port 8080
 ```
