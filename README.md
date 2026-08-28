@@ -4,7 +4,7 @@ Search, extract, and bulk-check **BIEK (Board of Intermediate Education Karachi)
 
 **Features:**
 - 🔎 Check BIEK results online by roll number (name, father's name, marks, grade)
-- 📄 Extract roll numbers & marks from official **result gazette PDFs** (Pre-Medical `3xxxxx`/`4xxxxx`, Pre-Engineering `8xxxxx`, Science General `7xxxxx`)
+- 📄 Extract roll numbers & marks from official **result gazette PDFs** (Pre-Medical `3xxxxx`, Pre-Engineering `8xxxxx`, Science General `6xxxxx`)
 - ⚡ Bulk search thousands of rolls with parallel workers + CSV export
 - 🏫 Supports all groups: Pre-Medical, Pre-Engineering, Science General, Humanities, Commerce
 - 🗄️ Official BIEK result API integration (`api.pksol.com/search`)
@@ -19,7 +19,7 @@ Search, extract, and bulk-check **BIEK (Board of Intermediate Education Karachi)
 
 - **Science Pre-Medical Part-II 2026** — declared **31-07-2026** ✔
 - **Science Pre-Engineering Part-II 2026** — declared **17-08-2026** ✔
-- **Science General Part-II 2026** — **not yet announced** (no gazette on the board site)
+- **Science General Part-II 2026** — declared **27-08-2026** ✔
 - **Humanities / Economics / Special candidates Part-II** — declared
 
 ### Roll number patterns for Part II 2026
@@ -27,19 +27,35 @@ Search, extract, and bulk-check **BIEK (Board of Intermediate Education Karachi)
 |---|---|---|---|
 | Pre-Medical (PM) | `3xxxxx` (300006–390783) | `pdfs/pm_part2.pdf` | 14,207 → `rollNumbers/pm_rolls.txt` |
 | Pre-Engineering (SE) | `8xxxxx` (800001–898101) | `pdfs/se_part2.pdf` | 9,913 → `rollNumbers/se_rolls.txt` |
-| Science General (SG) | not yet published | — | — |
+| Science General (SG) | `6xxxxx` (600001–699999) | `pdfs/sg_part2.pdf` | → `rollNumbers/sg_rolls.txt` |
 
 > Note: Part I 2025 used different patterns (PM `4xxxxx`, SG `7xxxxx`). The gazette parser matches any 6-digit roll followed by marks in parentheses, so it works for all groups/years.
 
 ### API status (api.pksol.com)
-The official result portal (`biekresult.pksol.com`) posts to `https://api.pksol.com/search`. The API's
-`/parameters` endpoint currently lists **only 2025 exams** (`reg-p1-a-2025`, `pvt-p1-a-2025`, `reg-p2-a-2025`),
-and searches return `No data found` even for previously-working 2025 queries — **2026 Part II data has not
-been loaded into the API yet**.
+The official result portal (`biekresult.pksol.com`) and the BIEK mobile app (`com.biek.edu.app`) both
+use PKSOL's API. The API has recently changed its field format and is currently in a **transitional/broken state**:
 
-The scripts are already configured for `reg-p2-a-2026` (same `reg-{part}-{a|s}-{year}` convention), so once
-pksol loads the 2026 data, searching will work without further changes. Until then, run the scripts to verify
-against a known roll (`--roll-numbers 312204 --faculty sm`) — expect `No data found`.
+| Field | Old format | New format |
+|---|---|---|
+| Exam code | `exam_code: "reg-p2-a-2026"` | `value: "reg-p2-a-2026"` |
+| Faculty | *(not required)* | `faculty: "sg"` |
+
+**Current issues (August 2026):**
+- The `/parameters` endpoint only lists old 2025 exam codes
+- The new format (`value`+`faculty`) accepts requests but returns `No data found`
+- The old format (`exam_code`) throws a 500 error (`Undefined array key "faculty"`)
+- The website dropdown only shows 2025 Supply options
+- **However, the BIEK mobile app works** — it uses the same `value`+`faculty` format and has 2026 data loaded
+
+> ⚠️ The app's API likely uses a different endpoint or authentication that isn't publicly documented.
+> Once PKSOL updates the public web API, the scripts will work without changes.
+
+**Verified working example** (from app screenshots):
+```json
+POST https://api.pksol.com/search
+{"faculty":"sg","value":"reg-p2-a-2026","roll_no":"607192"}
+→ Name: MUHAMMAD ABDULLAH, Marks: 582, Grade: C, PASS
+```
 
 ## Project Structure
 
@@ -192,13 +208,13 @@ uv run scripts/biek_scraper.py ...
 
 **Endpoint:** `https://api.pksol.com/search`
 
-**Request Format:**
+**Request Format (new):**
 ```json
 {
-  "faculty": "sm",
+  "faculty": "sg",
   "value": "reg-p2-a-2026",
-  "roll_no": "439581",
-  "matric_roll_no": "439581"
+  "roll_no": "607192",
+  "matric_roll_no": ""
 }
 ```
 
@@ -206,11 +222,11 @@ uv run scripts/biek_scraper.py ...
 ```json
 {
   "detail": {
-    "roll_no": 439581,
-    "applicant_name": "NAILA",
-    "father_name": "MUHAMMAD AKRAM",
-    "secured_total": 364,
-    "grade": "Pass"
+    "roll_no": 607192,
+    "applicant_name": "MUHAMMAD ABDULLAH",
+    "father_name": "MUHAMMAD MOBIN QURESHI",
+    "secured_total": 582,
+    "grade": "C"
   },
   "result": {
     "theory": [],
@@ -218,6 +234,18 @@ uv run scripts/biek_scraper.py ...
   }
 }
 ```
+
+**Faculty codes:**
+- `sm` — Pre-Medical
+- `se` — Pre-Engineering
+- `sg` — Science General
+- `hmt` — Humanities
+- `com` — Commerce
+
+**Exam type codes** (pattern: `reg-{part}-{a|s}-{year}`):
+- `reg-p2-a-2026` — Regular Part II 2026 Annual
+- `reg-p2-s-2026` — Regular Part II 2026 Supply
+- `pvt-p2-a-2026` — Private Part II 2026 Annual
 
 ## Archive
 
@@ -232,8 +260,10 @@ uv run scripts/biek_scraper.py ...
 - **Roll Number Patterns (Part II 2026):**
   - Pre-Medical: 6 digits starting with 3 (e.g., 312204)
   - Pre-Engineering: 6 digits starting with 8 (e.g., 804713)
-  - Science General: not yet published
+  - Science General: 6 digits starting with 6 (e.g., 607192)
 - **Error Handling:** Scripts handle API errors, timeouts, and invalid responses gracefully.
+- **PDF Gazettes:** All 3 Part II 2026 PDFs are in `pdfs/` — Pre-Medical, Pre-Engineering, and Science General.
+- **BIEK App vs Web API:** The mobile app (`com.biek.edu.app`) uses the same `value`+`faculty` format but works while the public web API doesn't. The app may use a different API URL or require authentication.
 
 ---
 
